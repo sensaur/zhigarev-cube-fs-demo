@@ -1,9 +1,6 @@
 [build]
-builder = "NIXPACKS"
-buildCommand = "pnpm install --frozen-lockfile && pnpm --filter api prisma:generate && pnpm --filter api build"
-
-[build.nixpacks]
-NIXPACKS_NODE_VERSION = "24"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 preDeployCommand = "pnpm --filter api prisma:migrate"
