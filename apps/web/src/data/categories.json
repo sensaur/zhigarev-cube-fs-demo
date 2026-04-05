@@ -5,5 +5,5 @@
   { "id": "bakery", "name": "Bakery" },
   { "id": "grocery", "name": "Grocery" },
   { "id": "beverages", "name": "Beverages" },
-  { "id": "non_food", "name": "Non-Food (Household & Home)" }
+  { "id": "non_food", "name": "Non-Food" }
 ]
