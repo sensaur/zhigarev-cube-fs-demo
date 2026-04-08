@@ -7,6 +7,8 @@ import { logger } from "./lib/logger.js";
 import healthRoutes from "./routes/health.js";
 import messageRoutes from "./routes/messages.js";
 import salesRoutes from "./routes/sales.js";
+import requestRoutes from "./routes/requests.js";
+import { requestLogger } from "./middleware/requestLogger.js";
 
 const app = express();
 const pinoHttp = (pinoHttpModule as unknown as { default?: (opts: unknown) => express.RequestHandler }).default
@@ -15,9 +17,11 @@ const pinoHttp = (pinoHttpModule as unknown as { default?: (opts: unknown) => ex
 app.use(pinoHttp({ logger }));
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(express.json());
+app.use(requestLogger);
 
 app.use(healthRoutes);
 app.use(messageRoutes);
 app.use(salesRoutes);
+app.use(requestRoutes);
 
 export default app;

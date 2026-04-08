@@ -8,3 +8,12 @@ export type {
   GenerateSalesParams,
   GenerateSalesResponse,
 } from "./types/sales.js";
+export type {
+  RequestLogEntry,
+  PaginatedResponse,
+  RequestStatsOverview,
+  EndpointStat,
+  StatusBreakdown,
+  HourlyTraffic,
+  RequestStatsResponse,
+} from "./types/requests.js";

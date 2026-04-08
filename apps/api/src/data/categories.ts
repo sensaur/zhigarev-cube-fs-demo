@@ -1,0 +1,11 @@
+import type { Category } from "@repo/shared";
+
+export const categories: Category[] = [
+  { id: "fruits_vegetables", name: "Fruits & Vegetables" },
+  { id: "dairy", name: "Dairy" },
+  { id: "meat_deli", name: "Meat & Deli" },
+  { id: "bakery", name: "Bakery" },
+  { id: "grocery", name: "Grocery" },
+  { id: "beverages", name: "Beverages" },
+  { id: "non_food", name: "Non-Food" },
+];

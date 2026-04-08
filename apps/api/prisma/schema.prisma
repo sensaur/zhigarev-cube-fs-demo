@@ -12,3 +12,20 @@ model Message {
   text      String
   createdAt DateTime @default(now())
 }
+
+model RequestLog {
+  id             String   @id @default(cuid())
+  method         String   @db.VarChar(10)
+  path           String
+  statusCode     Int
+  responseTimeMs Int
+  ip             String?
+  userAgent      String?
+  queryParams    String?
+  contentLength  Int?
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([path])
+  @@index([statusCode])
+}
