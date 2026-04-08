@@ -1,12 +1,8 @@
-import { useMemo, useState } from "react";
-import { generateSales } from "@/data/generateSales";
+import { useRef, useMemo, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { SaleRecord } from "@/data/types";
+import { useSalesStore, MAX_COUNTRIES, MAX_RECORDS } from "@/store/salesStore";
 import BsTooltip from "@/components/BsTooltip";
-
-const INITIAL_COUNTRIES = 5;
-const INITIAL_RECORDS = 50;
-const MAX_COUNTRIES = 27;
-const MAX_RECORDS = 10000;
 
 type SortKey = keyof Pick<SaleRecord, "revenue" | "saleDate"> | "country" | "category" | "paymentType";
 
@@ -18,6 +14,8 @@ const columns: { key: SortKey; label: string }[] = [
   { key: "saleDate", label: "Date" },
 ];
 
+const ROW_HEIGHT = 36;
+
 const titleStyle: React.CSSProperties = { fontSize: "1.4rem", fontWeight: 600 };
 const countryInputStyle: React.CSSProperties = { width: 90 };
 const recordInputStyle: React.CSSProperties = { width: 110 };
@@ -26,38 +24,52 @@ const thStyle: React.CSSProperties = {
   cursor: "pointer",
   userSelect: "none",
   whiteSpace: "nowrap",
-  position: "sticky",
-  top: 0,
-  background: "var(--bs-table-bg, #fff)",
-  zIndex: 1,
+  background: "var(--bs-body-bg)",
 };
 const pageStyle: React.CSSProperties = { display: "flex", flexDirection: "column", height: "100vh" };
 const scrollAreaStyle: React.CSSProperties = { flex: 1, overflow: "auto", minHeight: 0 };
+const spacerTd: React.CSSProperties = { padding: 0, border: "none", lineHeight: 0 };
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
+function CrashTest() {
+  const [crash, setCrash] = useState(false);
+  if (crash) throw new Error("CrashTest: intentional render error");
+  return (
+    <button type="button" className="btn btn-outline-danger btn-sm m-2" onClick={() => setCrash(true)}>
+      Crash test
+    </button>
+  );
+}
+
+function compareSaleRecords(a: SaleRecord, b: SaleRecord, key: SortKey): number {
+  switch (key) {
+    case "revenue": return a.revenue - b.revenue;
+    case "saleDate": return a.saleDate.localeCompare(b.saleDate);
+    case "country": return a.country.name.localeCompare(b.country.name);
+    case "category": return a.category.name.localeCompare(b.category.name);
+    case "paymentType": return a.paymentType.name.localeCompare(b.paymentType.name);
+  }
 }
 
 export default function SalesTablePage() {
-  const [countryCount, setCountryCount] = useState(INITIAL_COUNTRIES);
-  const [recordCount, setRecordCount] = useState(INITIAL_RECORDS);
+  const countryCount = useSalesStore((s) => s.countryCount);
+  const recordCount = useSalesStore((s) => s.recordCount);
+  const data = useSalesStore((s) => s.records);
+  const setCountryCount = useSalesStore((s) => s.setCountryCount);
+  const setRecordCount = useSalesStore((s) => s.setRecordCount);
+
   const [sortKey, setSortKey] = useState<SortKey>("saleDate");
   const [sortAsc, setSortAsc] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   function handleCountryChange(e: React.ChangeEvent<HTMLInputElement>) {
     const n = parseInt(e.target.value, 10);
-    if (!Number.isNaN(n)) setCountryCount(clamp(n, 1, MAX_COUNTRIES));
+    if (!Number.isNaN(n)) setCountryCount(n);
   }
 
   function handleRecordChange(e: React.ChangeEvent<HTMLInputElement>) {
     const n = parseInt(e.target.value, 10);
-    if (!Number.isNaN(n)) setRecordCount(clamp(n, 1, MAX_RECORDS));
+    if (!Number.isNaN(n)) setRecordCount(n);
   }
-
-  const data = useMemo(
-    () => generateSales(countryCount, recordCount),
-    [countryCount, recordCount],
-  );
 
   const totalRevenue = useMemo(
     () => data.reduce((sum, r) => sum + r.revenue, 0),
@@ -67,28 +79,26 @@ export default function SalesTablePage() {
   const sorted = useMemo(() => {
     const copy = [...data];
     copy.sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case "revenue":
-          cmp = a.revenue - b.revenue;
-          break;
-        case "saleDate":
-          cmp = a.saleDate.localeCompare(b.saleDate);
-          break;
-        case "country":
-          cmp = a.country.name.localeCompare(b.country.name);
-          break;
-        case "category":
-          cmp = a.category.name.localeCompare(b.category.name);
-          break;
-        case "paymentType":
-          cmp = a.paymentType.name.localeCompare(b.paymentType.name);
-          break;
-      }
+      const cmp = compareSaleRecords(a, b, sortKey);
       return sortAsc ? cmp : -cmp;
     });
     return copy;
   }, [data, sortKey, sortAsc]);
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: sorted.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 20,
+  });
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0]!.start : 0;
+  const paddingBottom =
+    virtualItems.length > 0
+      ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1]!.end
+      : 0;
 
   function handleSort(key: SortKey) {
     if (sortKey === key) {
@@ -107,6 +117,7 @@ export default function SalesTablePage() {
   return (
     <div className="container-fluid py-4" style={pageStyle}>
       <h1 className="mb-3" style={titleStyle}>Sales Table</h1>
+       <CrashTest />
 
       <div className="d-flex gap-3 align-items-end mb-3 flex-wrap flex-shrink-0">
         <div>
@@ -140,9 +151,9 @@ export default function SalesTablePage() {
         </div>
       </div>
 
-      <div style={scrollAreaStyle}>
+      <div ref={scrollRef} style={scrollAreaStyle}>
         <table className="table table-sm table-hover align-middle mb-0" style={tableStyle}>
-          <thead>
+          <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
             <tr>
               {columns.map((col) => (
                 <th
@@ -157,23 +168,36 @@ export default function SalesTablePage() {
             </tr>
           </thead>
           <tbody>
-            {sorted.map((r) => (
-              <tr key={r.id}>
-                <td>
-                  <BsTooltip title={r.country.name}><span>{r.country.code}</span></BsTooltip>
-                </td>
-                <td>{r.category.name}</td>
-                <td className="text-end fw-medium">€{r.revenue}</td>
-                <td>
-                  <span
-                    className={`badge ${r.paymentType.id === "cash" ? "bg-success-subtle text-success" : "bg-primary-subtle text-primary"}`}
-                  >
-                    {r.paymentType.name}
-                  </span>
-                </td>
-                <td className="text-muted">{r.saleDate}</td>
+            {paddingTop > 0 && (
+              <tr aria-hidden>
+                <td colSpan={columns.length} style={{ ...spacerTd, height: paddingTop }} />
               </tr>
-            ))}
+            )}
+            {virtualItems.map((vRow) => {
+              const r = sorted[vRow.index]!;
+              return (
+                <tr key={r.id}>
+                  <td>
+                    <BsTooltip title={r.country.name}><span>{r.country.code}</span></BsTooltip>
+                  </td>
+                  <td>{r.category.name}</td>
+                  <td className="text-end fw-medium">€{r.revenue}</td>
+                  <td>
+                    <span
+                      className={`badge ${r.paymentType.id === "cash" ? "bg-success-subtle text-success" : "bg-primary-subtle text-primary"}`}
+                    >
+                      {r.paymentType.name}
+                    </span>
+                  </td>
+                  <td className="text-muted">{r.saleDate}</td>
+                </tr>
+              );
+            })}
+            {paddingBottom > 0 && (
+              <tr aria-hidden>
+                <td colSpan={columns.length} style={{ ...spacerTd, height: paddingBottom }} />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

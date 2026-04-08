@@ -36,6 +36,21 @@ function formatDate(d: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function generateCustomerPool(
+  selectedCountries: Country[],
+  customersPerCountry: number,
+): Map<string, string[]> {
+  const pool = new Map<string, string[]>();
+  for (const country of selectedCountries) {
+    const ids: string[] = [];
+    for (let i = 0; i < customersPerCountry; i++) {
+      ids.push(crypto.randomUUID());
+    }
+    pool.set(country.code, ids);
+  }
+  return pool;
+}
+
 export function generateSales(
   countryCount: number,
   recordCount: number,
@@ -44,15 +59,22 @@ export function generateSales(
   const shuffled = shuffle(allCountries);
   const selectedCountries = shuffled.slice(0, clamped);
 
+  const customersPerCountry = Math.max(10, Math.ceil(recordCount / clamped / 3));
+  const customerPool = generateCustomerPool(selectedCountries, customersPerCountry);
+
   const startDate = new Date(2026, 0, 1);
   const endDate = new Date();
 
   const records: SaleRecord[] = [];
 
   for (let i = 0; i < recordCount; i++) {
+    const country = pick(selectedCountries);
+    const countryCustomers = customerPool.get(country.code)!;
+
     records.push({
       id: crypto.randomUUID(),
-      country: pick(selectedCountries),
+      customerId: pick(countryCustomers),
+      country,
       revenue: randomInt(1, 199),
       paymentType: pick(allPaymentTypes),
       saleDate: formatDate(randomDate(startDate, endDate)),

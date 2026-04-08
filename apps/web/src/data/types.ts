@@ -15,6 +15,7 @@ export interface PaymentType {
 
 export interface SaleRecord {
   id: string;
+  customerId: string;
   country: Country;
   revenue: number;
   paymentType: PaymentType;
