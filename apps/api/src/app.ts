@@ -11,6 +11,8 @@ import requestRoutes from "./routes/requests.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 
 const app = express();
+app.set("trust proxy", true);
+
 const pinoHttp = (pinoHttpModule as unknown as { default?: (opts: unknown) => express.RequestHandler }).default
   ?? (pinoHttpModule as unknown as (opts: unknown) => express.RequestHandler);
 
