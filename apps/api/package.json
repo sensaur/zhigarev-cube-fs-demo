@@ -17,6 +17,7 @@
     "prisma:push": "prisma db push"
   },
   "dependencies": {
+    "@repo/shared": "workspace:*",
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "^7.6.0",
     "cors": "^2.8.6",

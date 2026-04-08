@@ -1,6 +1,6 @@
 import { useRef, useMemo, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { SaleRecord } from "@/data/types";
+import type { SaleRecord } from "@repo/shared";
 import { useSalesStore, MAX_COUNTRIES, MAX_RECORDS } from "@/store/salesStore";
 import BsTooltip from "@/components/BsTooltip";
 
@@ -54,6 +54,8 @@ export default function SalesTablePage() {
   const countryCount = useSalesStore((s) => s.countryCount);
   const recordCount = useSalesStore((s) => s.recordCount);
   const data = useSalesStore((s) => s.records);
+  const loading = useSalesStore((s) => s.loading);
+  const error = useSalesStore((s) => s.error);
   const setCountryCount = useSalesStore((s) => s.setCountryCount);
   const setRecordCount = useSalesStore((s) => s.setRecordCount);
 
@@ -151,7 +153,20 @@ export default function SalesTablePage() {
         </div>
       </div>
 
+      {error && (
+        <div className="alert alert-danger py-2 flex-shrink-0" role="alert">
+          {error}
+        </div>
+      )}
+
       <div ref={scrollRef} style={scrollAreaStyle}>
+        {loading && data.length === 0 ? (
+          <div className="d-flex justify-content-center align-items-center py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading…</span>
+            </div>
+          </div>
+        ) : (
         <table className="table table-sm table-hover align-middle mb-0" style={tableStyle}>
           <thead style={{ position: "sticky", top: 0, zIndex: 1 }}>
             <tr>
@@ -200,6 +215,7 @@ export default function SalesTablePage() {
             )}
           </tbody>
         </table>
+        )}
       </div>
     </div>
   );

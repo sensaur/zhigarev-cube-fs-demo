@@ -6,6 +6,7 @@ import { env } from "./config.js";
 import { logger } from "./lib/logger.js";
 import healthRoutes from "./routes/health.js";
 import messageRoutes from "./routes/messages.js";
+import salesRoutes from "./routes/sales.js";
 
 const app = express();
 const pinoHttp = (pinoHttpModule as unknown as { default?: (opts: unknown) => express.RequestHandler }).default
@@ -17,5 +18,6 @@ app.use(express.json());
 
 app.use(healthRoutes);
 app.use(messageRoutes);
+app.use(salesRoutes);
 
 export default app;

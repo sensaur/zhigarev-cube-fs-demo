@@ -10,6 +10,8 @@ import { CategoryBarChart } from "./dashboard/CategoryBarChart";
 
 export default function DashboardPage() {
   const data = useSalesStore((s) => s.records);
+  const loading = useSalesStore((s) => s.loading);
+  const error = useSalesStore((s) => s.error);
   const theme = useThemeStore((s) => s.theme);
 
   const palette = useMemo(() => getPalette(theme), [theme]);
@@ -67,6 +69,24 @@ export default function DashboardPage() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
   }, [data]);
+
+  if (loading && data.length === 0) {
+    return (
+      <div className="d-flex justify-content-center align-items-center py-5">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container py-4">
+        <div className="alert alert-danger" role="alert">{error}</div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.page}>

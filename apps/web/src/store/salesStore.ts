@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import { generateSales } from "@/data/generateSales";
-import type { SaleRecord } from "@/data/types";
+import type { SaleRecord } from "@repo/shared";
+import { apiFetch } from "@/lib/api";
+import type { GenerateSalesResponse } from "@repo/shared";
 
 const DEFAULT_COUNTRIES = 5;
 const DEFAULT_RECORDS = 50;
@@ -13,6 +14,8 @@ interface SalesState {
   countryCount: number;
   recordCount: number;
   records: SaleRecord[];
+  loading: boolean;
+  error: string | null;
   setCountryCount: (n: number) => void;
   setRecordCount: (n: number) => void;
 }
@@ -22,31 +25,59 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 let regenerateTimer: ReturnType<typeof setTimeout> | null = null;
+let abortController: AbortController | null = null;
 
-function debouncedRegenerate(store: typeof useSalesStore) {
+async function fetchSales(store: typeof useSalesStore) {
+  abortController?.abort();
+  abortController = new AbortController();
+
+  const { countryCount, recordCount } = store.getState();
+  store.setState({ loading: true, error: null });
+
+  try {
+    const params = new URLSearchParams({
+      countryCount: String(countryCount),
+      recordCount: String(recordCount),
+    });
+
+    const data = await apiFetch<GenerateSalesResponse>(
+      `/api/sales?${params}`,
+      { signal: abortController.signal },
+    );
+
+    store.setState({ records: data.records, loading: false });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") return;
+    const message = err instanceof Error ? err.message : "Failed to fetch sales data";
+    store.setState({ error: message, loading: false });
+  }
+}
+
+function debouncedFetch(store: typeof useSalesStore) {
   if (regenerateTimer) clearTimeout(regenerateTimer);
-  regenerateTimer = setTimeout(() => {
-    const { countryCount, recordCount } = store.getState();
-    store.setState({ records: generateSales(countryCount, recordCount) });
-  }, DEBOUNCE_MS);
+  regenerateTimer = setTimeout(() => void fetchSales(store), DEBOUNCE_MS);
 }
 
 export const useSalesStore = create<SalesState>((set) => ({
   countryCount: DEFAULT_COUNTRIES,
   recordCount: DEFAULT_RECORDS,
-  records: generateSales(DEFAULT_COUNTRIES, DEFAULT_RECORDS),
+  records: [],
+  loading: true,
+  error: null,
 
   setCountryCount: (n) => {
     const countryCount = clamp(n, 1, MAX_COUNTRIES);
     if (countryCount === useSalesStore.getState().countryCount) return;
     set({ countryCount });
-    debouncedRegenerate(useSalesStore);
+    debouncedFetch(useSalesStore);
   },
 
   setRecordCount: (n) => {
     const recordCount = clamp(n, 1, MAX_RECORDS);
     if (recordCount === useSalesStore.getState().recordCount) return;
     set({ recordCount });
-    debouncedRegenerate(useSalesStore);
+    debouncedFetch(useSalesStore);
   },
 }));
+
+void fetchSales(useSalesStore);
