@@ -56,8 +56,10 @@ export default function SalesTablePage() {
   const data = useSalesStore((s) => s.records);
   const loading = useSalesStore((s) => s.loading);
   const error = useSalesStore((s) => s.error);
+  const liveCount = useSalesStore((s) => s.liveCount);
   const setCountryCount = useSalesStore((s) => s.setCountryCount);
   const setRecordCount = useSalesStore((s) => s.setRecordCount);
+  const refresh = useSalesStore((s) => s.refresh);
 
   const [sortKey, setSortKey] = useState<SortKey>("saleDate");
   const [sortAsc, setSortAsc] = useState(false);
@@ -150,7 +152,19 @@ export default function SalesTablePage() {
         </div>
         <div className="text-muted small align-self-center pt-3">
           Total: <strong>€{totalRevenue.toLocaleString()}</strong>
+          {liveCount > 0 && (
+            <span className="ms-2 text-success">+{liveCount} live</span>
+          )}
         </div>
+        <button
+          type="button"
+          className="btn btn-outline-primary btn-sm align-self-center"
+          onClick={refresh}
+          disabled={loading}
+          style={{ whiteSpace: "nowrap" }}
+        >
+          {loading ? "Loading…" : "Refresh Data"}
+        </button>
       </div>
 
       {error && (

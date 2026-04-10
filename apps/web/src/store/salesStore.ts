@@ -1,7 +1,8 @@
 import { create } from "zustand";
-import type { SaleRecord } from "@repo/shared";
+import type { SaleRecord, Country } from "@repo/shared";
 import { apiFetch } from "@/lib/api";
 import type { GenerateSalesResponse } from "@repo/shared";
+import { getSessionId } from "@/lib/session";
 
 const DEFAULT_COUNTRIES = 5;
 const DEFAULT_RECORDS = 50;
@@ -14,10 +15,13 @@ interface SalesState {
   countryCount: number;
   recordCount: number;
   records: SaleRecord[];
+  countries: Country[];
+  liveCount: number;
   loading: boolean;
   error: string | null;
   setCountryCount: (n: number) => void;
   setRecordCount: (n: number) => void;
+  refresh: () => void;
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -36,6 +40,7 @@ async function fetchSales(store: typeof useSalesStore) {
 
   try {
     const params = new URLSearchParams({
+      sessionId: getSessionId(),
       countryCount: String(countryCount),
       recordCount: String(recordCount),
     });
@@ -45,7 +50,14 @@ async function fetchSales(store: typeof useSalesStore) {
       { signal: abortController.signal },
     );
 
-    store.setState({ records: data.records, loading: false });
+    store.setState({
+      records: data.records,
+      countries: data.countries,
+      liveCount: data.meta.liveCount,
+      loading: false,
+    });
+
+    window.dispatchEvent(new CustomEvent("sales:session-updated"));
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") return;
     const message = err instanceof Error ? err.message : "Failed to fetch sales data";
@@ -62,6 +74,8 @@ export const useSalesStore = create<SalesState>((set) => ({
   countryCount: DEFAULT_COUNTRIES,
   recordCount: DEFAULT_RECORDS,
   records: [],
+  countries: [],
+  liveCount: 0,
   loading: true,
   error: null,
 
@@ -77,6 +91,10 @@ export const useSalesStore = create<SalesState>((set) => ({
     if (recordCount === useSalesStore.getState().recordCount) return;
     set({ recordCount });
     debouncedFetch(useSalesStore);
+  },
+
+  refresh: () => {
+    void fetchSales(useSalesStore);
   },
 }));
 

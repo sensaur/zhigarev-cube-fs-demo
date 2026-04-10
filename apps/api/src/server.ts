@@ -5,6 +5,7 @@ import { env } from "./config.js";
 import { logger } from "./lib/logger.js";
 import { prisma, pool } from "./lib/prisma.js";
 import { setupWebSocket } from "./ws/handler.js";
+import { sessionManager } from "./services/sessionManager.js";
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
@@ -18,6 +19,7 @@ const httpServer = server.listen(env.PORT, () => {
 async function shutdown(signal: string) {
   logger.info({ signal }, "Graceful shutdown started");
 
+  sessionManager.destroy();
   wss.close();
   httpServer.close(async () => {
     try {
@@ -34,4 +36,3 @@ async function shutdown(signal: string) {
 
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
-//

@@ -51,18 +51,20 @@ function generateCustomerPool(
 export const MAX_COUNTRIES = countries.length;
 export const MAX_RECORDS = 10_000;
 
-export function generateSales(
-  countryCount: number,
+export function pickCountries(count: number): Country[] {
+  const clamped = Math.max(1, Math.min(count, MAX_COUNTRIES));
+  return shuffle(countries).slice(0, clamped);
+}
+
+export function generateSalesForCountries(
+  selectedCountries: Country[],
   recordCount: number,
 ): SaleRecord[] {
-  const clampedCountries = Math.max(1, Math.min(countryCount, MAX_COUNTRIES));
   const clampedRecords = Math.max(1, Math.min(recordCount, MAX_RECORDS));
-
-  const selectedCountries = shuffle(countries).slice(0, clampedCountries);
 
   const customersPerCountry = Math.max(
     10,
-    Math.ceil(clampedRecords / clampedCountries / 3),
+    Math.ceil(clampedRecords / selectedCountries.length / 3),
   );
   const customerPool = generateCustomerPool(selectedCountries, customersPerCountry);
 
@@ -87,4 +89,27 @@ export function generateSales(
   }
 
   return records;
+}
+
+export function generateSales(
+  countryCount: number,
+  recordCount: number,
+): SaleRecord[] {
+  const selectedCountries = pickCountries(countryCount);
+  return generateSalesForCountries(selectedCountries, recordCount);
+}
+
+export function generateOneLiveSale(selectedCountries: Country[]): SaleRecord {
+  const country = pick(selectedCountries);
+  const revenue = Math.round((Math.random() * 198 + 1) * 100) / 100;
+
+  return {
+    id: randomUUID(),
+    customerId: randomUUID(),
+    country,
+    revenue,
+    paymentType: pick(paymentTypes),
+    saleDate: formatDate(new Date()),
+    category: pick(categories),
+  };
 }

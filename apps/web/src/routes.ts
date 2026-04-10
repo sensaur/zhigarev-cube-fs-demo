@@ -9,11 +9,13 @@ export interface AppRoute {
 const HomePage = lazy(() => import("@/pages/HomePage"));
 const SalesTablePage = lazy(() => import("@/pages/SalesTablePage"));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
+const LiveMapPage = lazy(() => import("@/pages/LiveMapPage"));
 const RequestsPage = lazy(() => import("@/pages/RequestsPage"));
 
 export const routes: AppRoute[] = [
   { path: "/", label: "Home", component: HomePage },
   { path: "/sales", label: "Sales Table", component: SalesTablePage },
   { path: "/dashboard", label: "Dashboard", component: DashboardPage },
+  { path: "/live-map", label: "Live Map", component: LiveMapPage },
   { path: "/requests", label: "Request Log", component: RequestsPage },
 ];

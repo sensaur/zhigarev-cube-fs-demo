@@ -12,6 +12,8 @@ export default function DashboardPage() {
   const data = useSalesStore((s) => s.records);
   const loading = useSalesStore((s) => s.loading);
   const error = useSalesStore((s) => s.error);
+  const liveCount = useSalesStore((s) => s.liveCount);
+  const refresh = useSalesStore((s) => s.refresh);
   const theme = useThemeStore((s) => s.theme);
 
   const palette = useMemo(() => getPalette(theme), [theme]);
@@ -90,6 +92,21 @@ export default function DashboardPage() {
 
   return (
     <div style={styles.page}>
+      <div className="d-flex align-items-center gap-3 mb-3">
+        <button
+          type="button"
+          className="btn btn-outline-primary btn-sm"
+          onClick={refresh}
+          disabled={loading}
+        >
+          {loading ? "Loading…" : "Refresh Data"}
+        </button>
+        {liveCount > 0 && (
+          <span style={{ fontSize: "0.82rem", color: palette.muted }}>
+            Includes <strong style={{ color: "#56c596" }}>{liveCount}</strong> live sales from WebSocket
+          </span>
+        )}
+      </div>
       <KpiCards {...kpis} styles={styles} />
 
       <div className="row g-3 mb-4">

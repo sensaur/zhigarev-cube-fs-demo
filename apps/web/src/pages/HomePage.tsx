@@ -16,6 +16,7 @@ const highlights = [
   "Zustand state management",
   "Virtualized tables (TanStack Virtual)",
   "Recharts dashboards",
+  "Live Map — real-time sales via WebSocket + react-simple-maps",
   "Express API + monorepo (pnpm workspaces)",
 ];
 
@@ -44,8 +45,8 @@ export default function HomePage() {
         <div className="card-body" style={cardBodyStyle}>
           <p className="mb-2">
             This app demonstrates working with <strong>data-heavy UI</strong>,
-            real-time analytics charts, and a clean full-stack architecture
-            — built as a portfolio piece for the{" "}
+            real-time analytics charts, WebSocket-powered live data feeds,
+            and a clean full-stack architecture — built as a portfolio piece for the{" "}
             <a
               href="https://www.careers-page.com/cube-dev/job/63X78V5R"
               target="_blank"

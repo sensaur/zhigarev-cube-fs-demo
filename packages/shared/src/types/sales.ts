@@ -33,6 +33,9 @@ export interface GenerateSalesResponse {
   meta: {
     countryCount: number;
     recordCount: number;
+    liveCount: number;
     generatedAt: string;
+    sessionId: string;
   };
+  countries: Country[];
 }
