@@ -8,6 +8,7 @@ import healthRoutes from "./routes/health.js";
 import messageRoutes from "./routes/messages.js";
 import salesRoutes from "./routes/sales.js";
 import requestRoutes from "./routes/requests.js";
+import aiRoutes from "./routes/ai.js";
 import { requestLogger } from "./middleware/requestLogger.js";
 
 const app = express();
@@ -25,5 +26,6 @@ app.use(healthRoutes);
 app.use(messageRoutes);
 app.use(salesRoutes);
 app.use(requestRoutes);
+app.use(aiRoutes);
 
 export default app;

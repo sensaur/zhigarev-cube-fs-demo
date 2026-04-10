@@ -11,6 +11,7 @@ const SalesTablePage = lazy(() => import("@/pages/SalesTablePage"));
 const DashboardPage = lazy(() => import("@/pages/DashboardPage"));
 const LiveMapPage = lazy(() => import("@/pages/LiveMapPage"));
 const RequestsPage = lazy(() => import("@/pages/RequestsPage"));
+const AiChatPage = lazy(() => import("@/pages/AiChatPage"));
 
 export const routes: AppRoute[] = [
   { path: "/", label: "Home", component: HomePage },
@@ -18,4 +19,5 @@ export const routes: AppRoute[] = [
   { path: "/dashboard", label: "Dashboard", component: DashboardPage },
   { path: "/live-map", label: "Live Map", component: LiveMapPage },
   { path: "/requests", label: "Request Log", component: RequestsPage },
+  { path: "/ai-chat", label: "AI Chat", component: AiChatPage },
 ];
