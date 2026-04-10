@@ -13,13 +13,13 @@ const listStyle: React.CSSProperties = { fontSize: "0.88rem" };
 
 const highlights = [
   "React 19 + TypeScript",
-  "Zustand state management",
+  "Zustand",
   "Virtualized tables (TanStack Virtual)",
-  "Recharts dashboards",
-  "Live Map — real-time sales via WebSocket + react-simple-maps",
-  "AI Analytics Chat — natural language queries over request logs via Claude API",
-  "Multi-conversation chat with persistent history and auto-generated titles",
-  "Express API + Prisma + PostgreSQL monorepo (pnpm workspaces + Turborepo)",
+  "Recharts (sales REST API)",
+  "Live Map — WebSocket + react-simple-maps",
+  "AI chat — Claude on HTTP request logs (no Cube.js in repo)",
+  "Chat: multiple threads, DB history, auto titles",
+  "Express, Prisma, PostgreSQL — pnpm workspaces, Turborepo",
 ];
 
 export default function HomePage() {
@@ -46,10 +46,7 @@ export default function HomePage() {
       <div className="card mb-4">
         <div className="card-body" style={cardBodyStyle}>
           <p className="mb-2">
-            This app demonstrates working with <strong>data-heavy UI</strong>,
-            real-time analytics charts, WebSocket-powered live data feeds,
-            AI-powered natural language analytics, and a clean full-stack
-            architecture — built as a portfolio piece for the{" "}
+            Demo for the{" "}
             <a
               href="https://www.careers-page.com/cube-dev/job/63X78V5R"
               target="_blank"
@@ -57,7 +54,9 @@ export default function HomePage() {
             >
               Full-Stack Engineer
             </a>{" "}
-            opening at Cube.
+            role: sales table and charts (REST), a live map (WebSocket), and a
+            chat that answers questions about stored request logs (Claude).
+            Stack: React, Express, Prisma, Postgres.
           </p>
           <p className="mb-0 text-muted">
             Navigate using the tabs above to explore the app.
