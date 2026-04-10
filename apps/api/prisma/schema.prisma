@@ -29,3 +29,14 @@ model RequestLog {
   @@index([path])
   @@index([statusCode])
 }
+
+model AiChat {
+  id        String   @id @default(cuid())
+  sessionId String
+  role      String   @db.VarChar(10)
+  content   String
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+}

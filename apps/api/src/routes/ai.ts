@@ -2,16 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
-import type { AiQueryResponse } from "@repo/shared";
+import type { AiQueryResponse, AiChatHistoryResponse, AiChatMessage } from "@repo/shared";
 
 const router = Router();
 
-const querySchema = z.object({
-  question: z.string().min(1).max(500),
-});
-
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-20250514";
+const HISTORY_LIMIT = 10;
 
 const SYSTEM_PROMPT = `You are an analytics assistant. You receive HTTP request log data from a web application and answer user questions about it.
 
@@ -32,6 +29,47 @@ Response format:
 If a table is not useful for the answer, omit the "data" field entirely.
 Keep answers concise and data-driven.`;
 
+const sessionIdSchema = z.string().uuid();
+
+const querySchema = z.object({
+  sessionId: z.string().uuid(),
+  question: z.string().min(1).max(500),
+});
+
+router.get("/api/ai/history", async (req, res) => {
+  const parsed = sessionIdSchema.safeParse(req.query.sessionId);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid sessionId" });
+    return;
+  }
+
+  const messages = await prisma.aiChat.findMany({
+    where: { sessionId: parsed.data },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const response: AiChatHistoryResponse = {
+    messages: messages.map((m) => ({
+      ...m,
+      role: m.role as "user" | "assistant",
+      data: m.data as AiChatMessage["data"],
+      createdAt: m.createdAt.toISOString(),
+    })),
+  };
+  res.json(response);
+});
+
+router.delete("/api/ai/history", async (req, res) => {
+  const parsed = sessionIdSchema.safeParse(req.query.sessionId);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid sessionId" });
+    return;
+  }
+
+  await prisma.aiChat.deleteMany({ where: { sessionId: parsed.data } });
+  res.json({ ok: true });
+});
+
 router.post("/api/ai/query", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -48,22 +86,37 @@ router.post("/api/ai/query", async (req, res) => {
     return;
   }
 
-  const { question } = parsed.data;
+  const { sessionId, question } = parsed.data;
 
   try {
-    const logs = await prisma.requestLog.findMany({
-      select: {
-        method: true,
-        path: true,
-        statusCode: true,
-        responseTimeMs: true,
-        ip: true,
-        userAgent: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-      take: 200,
+    const [logs, history] = await Promise.all([
+      prisma.requestLog.findMany({
+        select: {
+          method: true,
+          path: true,
+          statusCode: true,
+          responseTimeMs: true,
+          ip: true,
+          userAgent: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+      }),
+      prisma.aiChat.findMany({
+        where: { sessionId },
+        orderBy: { createdAt: "desc" },
+        take: HISTORY_LIMIT,
+      }),
+    ]);
+
+    await prisma.aiChat.create({
+      data: { sessionId, role: "user", content: question },
     });
+
+    const historyMessages = history
+      .reverse()
+      .map((msg) => ({ role: msg.role as "user" | "assistant", content: msg.content }));
 
     const userMessage = `Here are the latest ${logs.length} HTTP request logs:\n\n${JSON.stringify(logs)}\n\nQuestion: ${question}`;
 
@@ -78,7 +131,7 @@ router.post("/api/ai/query", async (req, res) => {
         model: MODEL,
         max_tokens: 1024,
         system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userMessage }],
+        messages: [...historyMessages, { role: "user", content: userMessage }],
       }),
     });
 
@@ -104,6 +157,15 @@ router.post("/api/ai/query", async (req, res) => {
     } catch {
       result = { answer: rawText };
     }
+
+    await prisma.aiChat.create({
+      data: {
+        sessionId,
+        role: "assistant",
+        content: result.answer,
+        data: result.data ? JSON.parse(JSON.stringify(result.data)) : undefined,
+      },
+    });
 
     res.json(result);
   } catch (err) {

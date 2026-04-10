@@ -22,4 +22,9 @@ export type {
   HourlyTraffic,
   RequestStatsResponse,
 } from "./types/requests.js";
-export type { AiQueryRequest, AiQueryResponse } from "./types/ai.js";
+export type {
+  AiQueryRequest,
+  AiQueryResponse,
+  AiChatMessage,
+  AiChatHistoryResponse,
+} from "./types/ai.js";

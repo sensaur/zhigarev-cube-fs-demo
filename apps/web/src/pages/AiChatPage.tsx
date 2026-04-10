@@ -1,14 +1,15 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useThemeStore } from "@/store/themeStore";
 import { getPalette, buildStyles } from "./dashboard/theme";
 import { apiFetch } from "@/lib/api";
-import type { AiQueryResponse } from "@repo/shared";
+import { getSessionId } from "@/lib/session";
+import type { AiQueryResponse, AiChatHistoryResponse } from "@repo/shared";
 
 interface ChatMessage {
-  id: number;
+  id: string;
   role: "user" | "assistant";
   text: string;
-  data?: Array<Record<string, unknown>>;
+  data?: Array<Record<string, unknown>> | null;
 }
 
 const SUGGESTIONS = [
@@ -18,16 +19,21 @@ const SUGGESTIONS = [
   "Show me the slowest endpoints",
 ];
 
-let nextId = 0;
+let nextLocalId = 0;
+function localId() {
+  return `local-${nextLocalId++}`;
+}
 
 export default function AiChatPage() {
   const theme = useThemeStore((s) => s.theme);
   const palette = useMemo(() => getPalette(theme), [theme]);
   const s = useMemo(() => buildStyles(palette), [palette]);
+  const sessionId = useMemo(() => getSessionId(), []);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [hydrating, setHydrating] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -35,10 +41,35 @@ export default function AiChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  useEffect(() => {
+    async function loadHistory() {
+      try {
+        const res = await apiFetch<AiChatHistoryResponse>(
+          `/api/ai/history?sessionId=${sessionId}`,
+        );
+        if (res.messages.length > 0) {
+          setMessages(
+            res.messages.map((m) => ({
+              id: m.id,
+              role: m.role,
+              text: m.content,
+              data: m.data,
+            })),
+          );
+        }
+      } catch {
+        /* history is non-critical */
+      } finally {
+        setHydrating(false);
+      }
+    }
+    void loadHistory();
+  }, [sessionId]);
+
   async function send(question: string) {
     if (!question.trim() || loading) return;
 
-    const userMsg: ChatMessage = { id: nextId++, role: "user", text: question.trim() };
+    const userMsg: ChatMessage = { id: localId(), role: "user", text: question.trim() };
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setLoading(true);
@@ -46,11 +77,11 @@ export default function AiChatPage() {
     try {
       const res = await apiFetch<AiQueryResponse>("/api/ai/query", {
         method: "POST",
-        body: JSON.stringify({ question: question.trim() }),
+        body: JSON.stringify({ sessionId, question: question.trim() }),
       });
 
       const assistantMsg: ChatMessage = {
-        id: nextId++,
+        id: localId(),
         role: "assistant",
         text: res.answer,
         data: res.data,
@@ -58,7 +89,7 @@ export default function AiChatPage() {
       setMessages((prev) => [...prev, assistantMsg]);
     } catch (err) {
       const errorMsg: ChatMessage = {
-        id: nextId++,
+        id: localId(),
         role: "assistant",
         text: err instanceof Error ? err.message : "Something went wrong",
       };
@@ -68,6 +99,15 @@ export default function AiChatPage() {
       inputRef.current?.focus();
     }
   }
+
+  const clearHistory = useCallback(async () => {
+    try {
+      await apiFetch(`/api/ai/history?sessionId=${sessionId}`, { method: "DELETE" });
+      setMessages([]);
+    } catch {
+      /* best-effort */
+    }
+  }, [sessionId]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -97,13 +137,35 @@ export default function AiChatPage() {
     lineHeight: 1.5,
   };
 
+  if (hydrating) {
+    return (
+      <div style={{ ...s.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading…</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ ...s.page, display: "flex", flexDirection: "column", padding: 0 }}>
-      <div style={{ padding: "20px 28px 0" }}>
-        <h1 style={{ fontSize: "1.4rem", fontWeight: 600, marginBottom: 4 }}>AI Analytics Chat</h1>
-        <p style={{ color: palette.muted, fontSize: "0.85rem", margin: 0 }}>
-          Ask questions about your HTTP request logs in natural language
-        </p>
+      <div style={{ padding: "20px 28px 0", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div>
+          <h1 style={{ fontSize: "1.4rem", fontWeight: 600, marginBottom: 4 }}>AI Analytics Chat</h1>
+          <p style={{ color: palette.muted, fontSize: "0.85rem", margin: 0 }}>
+            Ask questions about your HTTP request logs in natural language
+          </p>
+        </div>
+        {messages.length > 0 && (
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            style={{ fontSize: "0.8rem", whiteSpace: "nowrap", marginTop: 4 }}
+            onClick={() => void clearHistory()}
+          >
+            Clear chat
+          </button>
+        )}
       </div>
 
       <div
