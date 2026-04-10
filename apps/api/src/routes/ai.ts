@@ -2,7 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
-import type { AiQueryResponse, AiChatHistoryResponse, AiChatMessage } from "@repo/shared";
+import type {
+  AiQueryResponse,
+  AiChatHistoryResponse,
+  AiChatMessage,
+  AiConversationsListResponse,
+  AiConversation,
+} from "@repo/shared";
 
 const router = Router();
 
@@ -32,26 +38,87 @@ Keep answers concise and data-driven.`;
 const sessionIdSchema = z.string().uuid();
 
 const querySchema = z.object({
-  sessionId: z.string().uuid(),
+  conversationId: z.string().min(1),
   question: z.string().min(1).max(500),
 });
 
-router.get("/api/ai/history", async (req, res) => {
+function toConversationDto(c: {
+  id: string;
+  sessionId: string;
+  title: string;
+  createdAt: Date;
+  archivedAt: Date | null;
+}): AiConversation {
+  return {
+    id: c.id,
+    sessionId: c.sessionId,
+    title: c.title,
+    createdAt: c.createdAt.toISOString(),
+    archivedAt: c.archivedAt?.toISOString() ?? null,
+  };
+}
+
+// --- Conversations CRUD ---
+
+router.get("/api/ai/conversations", async (req, res) => {
   const parsed = sessionIdSchema.safeParse(req.query.sessionId);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid sessionId" });
     return;
   }
 
+  const conversations = await prisma.aiConversation.findMany({
+    where: { sessionId: parsed.data, archivedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const response: AiConversationsListResponse = {
+    conversations: conversations.map(toConversationDto),
+  };
+  res.json(response);
+});
+
+router.post("/api/ai/conversations", async (req, res) => {
+  const parsed = z.object({ sessionId: z.string().uuid() }).safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid sessionId" });
+    return;
+  }
+
+  const conversation = await prisma.aiConversation.create({
+    data: { sessionId: parsed.data.sessionId },
+  });
+
+  res.status(201).json(toConversationDto(conversation));
+});
+
+router.delete("/api/ai/conversations/:id", async (req, res) => {
+  const id = req.params.id;
+
+  await prisma.aiConversation.update({
+    where: { id },
+    data: { archivedAt: new Date() },
+  });
+
+  res.json({ ok: true });
+});
+
+// --- Messages ---
+
+router.get("/api/ai/conversations/:id/messages", async (req, res) => {
+  const id = req.params.id;
+
   const messages = await prisma.aiChat.findMany({
-    where: { sessionId: parsed.data },
+    where: { conversationId: id },
     orderBy: { createdAt: "asc" },
   });
 
   const response: AiChatHistoryResponse = {
     messages: messages.map((m) => ({
-      ...m,
+      id: m.id,
+      conversationId: m.conversationId,
       role: m.role as "user" | "assistant",
+      content: m.content,
       data: m.data as AiChatMessage["data"],
       createdAt: m.createdAt.toISOString(),
     })),
@@ -59,16 +126,42 @@ router.get("/api/ai/history", async (req, res) => {
   res.json(response);
 });
 
-router.delete("/api/ai/history", async (req, res) => {
-  const parsed = sessionIdSchema.safeParse(req.query.sessionId);
-  if (!parsed.success) {
-    res.status(400).json({ error: "Invalid sessionId" });
-    return;
-  }
+// --- AI Query ---
 
-  await prisma.aiChat.deleteMany({ where: { sessionId: parsed.data } });
-  res.json({ ok: true });
-});
+async function generateTitle(apiKey: string, question: string, answer: string): Promise<string> {
+  try {
+    const res = await fetch(ANTHROPIC_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        max_tokens: 30,
+        messages: [{
+          role: "user",
+          content: `Generate a short title (3-6 words, no quotes) for a chat that starts with this question and answer:\nQ: ${question}\nA: ${answer}`,
+        }],
+      }),
+    });
+
+    if (!res.ok) return "New chat";
+
+    const data = (await res.json()) as { content: Array<{ type: string; text: string }> };
+    const title = data.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("")
+      .trim()
+      .replace(/^["']|["']$/g, "");
+
+    return title || "New chat";
+  } catch {
+    return "New chat";
+  }
+}
 
 router.post("/api/ai/query", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -86,10 +179,10 @@ router.post("/api/ai/query", async (req, res) => {
     return;
   }
 
-  const { sessionId, question } = parsed.data;
+  const { conversationId, question } = parsed.data;
 
   try {
-    const [logs, history] = await Promise.all([
+    const [logs, history, conversation] = await Promise.all([
       prisma.requestLog.findMany({
         select: {
           method: true,
@@ -104,15 +197,25 @@ router.post("/api/ai/query", async (req, res) => {
         take: 200,
       }),
       prisma.aiChat.findMany({
-        where: { sessionId },
+        where: { conversationId },
         orderBy: { createdAt: "desc" },
         take: HISTORY_LIMIT,
       }),
+      prisma.aiConversation.findUnique({
+        where: { id: conversationId },
+      }),
     ]);
 
+    if (!conversation) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+
     await prisma.aiChat.create({
-      data: { sessionId, role: "user", content: question },
+      data: { conversationId, role: "user", content: question },
     });
+
+    const isFirstMessage = history.length === 0;
 
     const historyMessages = history
       .reverse()
@@ -160,12 +263,20 @@ router.post("/api/ai/query", async (req, res) => {
 
     await prisma.aiChat.create({
       data: {
-        sessionId,
+        conversationId,
         role: "assistant",
         content: result.answer,
         data: result.data ? JSON.parse(JSON.stringify(result.data)) : undefined,
       },
     });
+
+    if (isFirstMessage) {
+      const title = await generateTitle(apiKey, question, result.answer);
+      await prisma.aiConversation.update({
+        where: { id: conversationId },
+        data: { title },
+      });
+    }
 
     res.json(result);
   } catch (err) {

@@ -3,7 +3,12 @@ import { useThemeStore } from "@/store/themeStore";
 import { getPalette, buildStyles } from "./dashboard/theme";
 import { apiFetch } from "@/lib/api";
 import { getSessionId } from "@/lib/session";
-import type { AiQueryResponse, AiChatHistoryResponse } from "@repo/shared";
+import type {
+  AiConversation,
+  AiConversationsListResponse,
+  AiQueryResponse,
+  AiChatHistoryResponse,
+} from "@repo/shared";
 
 interface ChatMessage {
   id: string;
@@ -30,6 +35,8 @@ export default function AiChatPage() {
   const s = useMemo(() => buildStyles(palette), [palette]);
   const sessionId = useMemo(() => getSessionId(), []);
 
+  const [conversations, setConversations] = useState<AiConversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -41,13 +48,48 @@ export default function AiChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const createConversation = useCallback(async () => {
+    const conv = await apiFetch<AiConversation>("/api/ai/conversations", {
+      method: "POST",
+      body: JSON.stringify({ sessionId }),
+    });
+    setConversations((prev) => [conv, ...prev]);
+    setActiveId(conv.id);
+    setMessages([]);
+    return conv;
+  }, [sessionId]);
+
   useEffect(() => {
-    async function loadHistory() {
+    async function init() {
+      try {
+        const res = await apiFetch<AiConversationsListResponse>(
+          `/api/ai/conversations?sessionId=${sessionId}`,
+        );
+        if (res.conversations.length > 0) {
+          setConversations(res.conversations);
+          setActiveId(res.conversations[0].id);
+        } else {
+          await createConversation();
+        }
+      } catch {
+        /* non-critical */
+      } finally {
+        setHydrating(false);
+      }
+    }
+    void init();
+  }, [sessionId, createConversation]);
+
+  useEffect(() => {
+    if (!activeId) return;
+    let cancelled = false;
+
+    async function loadMessages() {
       try {
         const res = await apiFetch<AiChatHistoryResponse>(
-          `/api/ai/history?sessionId=${sessionId}`,
+          `/api/ai/conversations/${activeId}/messages`,
         );
-        if (res.messages.length > 0) {
+        if (!cancelled) {
           setMessages(
             res.messages.map((m) => ({
               id: m.id,
@@ -58,16 +100,16 @@ export default function AiChatPage() {
           );
         }
       } catch {
-        /* history is non-critical */
-      } finally {
-        setHydrating(false);
+        if (!cancelled) setMessages([]);
       }
     }
-    void loadHistory();
-  }, [sessionId]);
+
+    void loadMessages();
+    return () => { cancelled = true; };
+  }, [activeId]);
 
   async function send(question: string) {
-    if (!question.trim() || loading) return;
+    if (!question.trim() || loading || !activeId) return;
 
     const userMsg: ChatMessage = { id: localId(), role: "user", text: question.trim() };
     setMessages((prev) => [...prev, userMsg]);
@@ -77,7 +119,7 @@ export default function AiChatPage() {
     try {
       const res = await apiFetch<AiQueryResponse>("/api/ai/query", {
         method: "POST",
-        body: JSON.stringify({ sessionId, question: question.trim() }),
+        body: JSON.stringify({ conversationId: activeId, question: question.trim() }),
       });
 
       const assistantMsg: ChatMessage = {
@@ -87,6 +129,11 @@ export default function AiChatPage() {
         data: res.data,
       };
       setMessages((prev) => [...prev, assistantMsg]);
+
+      const refreshed = await apiFetch<AiConversationsListResponse>(
+        `/api/ai/conversations?sessionId=${sessionId}`,
+      );
+      setConversations(refreshed.conversations);
     } catch (err) {
       const errorMsg: ChatMessage = {
         id: localId(),
@@ -100,14 +147,35 @@ export default function AiChatPage() {
     }
   }
 
-  const clearHistory = useCallback(async () => {
+  async function handleNewChat() {
     try {
-      await apiFetch(`/api/ai/history?sessionId=${sessionId}`, { method: "DELETE" });
-      setMessages([]);
+      await createConversation();
     } catch {
       /* best-effort */
     }
-  }, [sessionId]);
+  }
+
+  async function handleArchive(convId: string) {
+    try {
+      await apiFetch(`/api/ai/conversations/${convId}`, { method: "DELETE" });
+      setConversations((prev) => prev.filter((c) => c.id !== convId));
+      if (activeId === convId) {
+        const remaining = conversations.filter((c) => c.id !== convId);
+        if (remaining.length > 0) {
+          setActiveId(remaining[0].id);
+        } else {
+          await createConversation();
+        }
+      }
+    } catch {
+      /* best-effort */
+    }
+  }
+
+  function selectConversation(convId: string) {
+    if (convId === activeId) return;
+    setActiveId(convId);
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -137,6 +205,28 @@ export default function AiChatPage() {
     lineHeight: 1.5,
   };
 
+  const sidebarStyle: React.CSSProperties = {
+    width: 260,
+    minWidth: 260,
+    borderRight: `1px solid ${palette.border}`,
+    background: palette.bg,
+    display: "flex",
+    flexDirection: "column",
+    overflow: "hidden",
+  };
+
+  const sidebarItemBase: React.CSSProperties = {
+    padding: "8px 12px",
+    borderRadius: 6,
+    fontSize: "0.82rem",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    transition: "background 0.15s",
+  };
+
   if (hydrating) {
     return (
       <div style={{ ...s.page, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -148,163 +238,218 @@ export default function AiChatPage() {
   }
 
   return (
-    <div style={{ ...s.page, display: "flex", flexDirection: "column", padding: 0 }}>
-      <div style={{ padding: "20px 28px 0", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
-        <div>
-          <h1 style={{ fontSize: "1.4rem", fontWeight: 600, marginBottom: 4 }}>AI Analytics Chat</h1>
-          <p style={{ color: palette.muted, fontSize: "0.85rem", margin: 0 }}>
-            Ask questions about your HTTP request logs in natural language
-          </p>
-        </div>
-        {messages.length > 0 && (
+    <div style={{ ...s.page, display: "flex", padding: 0 }}>
+      {/* Sidebar */}
+      <div style={sidebarStyle}>
+        <div style={{ padding: "16px 12px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontSize: "0.85rem", fontWeight: 600, color: palette.text }}>Chats</span>
           <button
             type="button"
-            className="btn btn-sm btn-outline-secondary"
-            style={{ fontSize: "0.8rem", whiteSpace: "nowrap", marginTop: 4 }}
-            onClick={() => void clearHistory()}
+            className="btn btn-sm btn-primary"
+            style={{ fontSize: "0.75rem", padding: "3px 10px" }}
+            onClick={() => void handleNewChat()}
           >
-            Clear chat
+            + New
           </button>
-        )}
-      </div>
+        </div>
 
-      <div
-        style={{
-          flex: 1,
-          overflow: "auto",
-          padding: "20px 28px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 12,
-        }}
-      >
-        {messages.length === 0 && !loading && (
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 16,
-            }}
-          >
-            <div style={{ color: palette.muted, fontSize: "0.9rem", fontWeight: 500 }}>
-              Try one of these questions:
-            </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 600 }}>
-              {SUGGESTIONS.map((q) => (
+        <div style={{ flex: 1, overflow: "auto", padding: "0 8px 8px" }}>
+          {conversations.map((conv) => {
+            const isActive = conv.id === activeId;
+            return (
+              <div
+                key={conv.id}
+                style={{
+                  ...sidebarItemBase,
+                  background: isActive ? palette.card : "transparent",
+                  border: isActive ? `1px solid ${palette.border}` : "1px solid transparent",
+                  marginBottom: 2,
+                }}
+                onClick={() => selectConversation(conv.id)}
+              >
+                <span
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    color: palette.text,
+                    fontWeight: isActive ? 600 : 400,
+                  }}
+                  title={conv.title}
+                >
+                  {conv.title}
+                </span>
                 <button
-                  key={q}
                   type="button"
                   className="btn btn-sm"
                   style={{
-                    background: palette.card,
-                    border: `1px solid ${palette.border}`,
-                    color: palette.text,
-                    borderRadius: 20,
-                    fontSize: "0.82rem",
-                    padding: "6px 14px",
+                    fontSize: "0.7rem",
+                    padding: "1px 5px",
+                    color: palette.muted,
+                    lineHeight: 1,
+                    flexShrink: 0,
                   }}
-                  onClick={() => void send(q)}
+                  title="Delete chat"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleArchive(conv.id);
+                  }}
                 >
-                  {q}
+                  ×
                 </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {messages.map((msg) => (
-          <div key={msg.id} style={{ display: "flex", flexDirection: "column" }}>
-            <div style={msg.role === "user" ? bubbleUser : bubbleAssistant}>
-              {msg.text}
-            </div>
-
-            {msg.data && msg.data.length > 0 && (
-              <div
-                style={{
-                  ...s.panel,
-                  marginTop: 8,
-                  alignSelf: "flex-start",
-                  maxWidth: "85%",
-                  overflow: "auto",
-                }}
-              >
-                <table
-                  className="table table-sm table-hover mb-0"
-                  style={{ fontSize: "0.82rem" }}
-                >
-                  <thead>
-                    <tr>
-                      {Object.keys(msg.data[0]).map((key) => (
-                        <th key={key} className="text-muted fw-semibold text-nowrap">
-                          {key}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {msg.data.map((row, i) => (
-                      <tr key={i}>
-                        {Object.values(row).map((val, j) => (
-                          <td key={j} className="text-nowrap">
-                            {String(val)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
               </div>
-            )}
-          </div>
-        ))}
-
-        {loading && (
-          <div style={{ alignSelf: "flex-start", padding: "10px 16px" }}>
-            <div className="spinner-border spinner-border-sm text-primary" role="status">
-              <span className="visually-hidden">Thinking…</span>
-            </div>
-            <span style={{ color: palette.muted, fontSize: "0.85rem", marginLeft: 8 }}>
-              Analyzing logs…
-            </span>
-          </div>
-        )}
-
-        <div ref={bottomRef} />
+            );
+          })}
+        </div>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        style={{
-          padding: "16px 28px",
-          borderTop: `1px solid ${palette.border}`,
-          background: palette.card,
-          display: "flex",
-          gap: 10,
-        }}
-      >
-        <input
-          ref={inputRef}
-          type="text"
-          className="form-control"
-          placeholder="Ask about your request logs…"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          disabled={loading}
-          autoFocus
-          style={{ fontSize: "0.9rem" }}
-        />
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={loading || !input.trim()}
-          style={{ whiteSpace: "nowrap" }}
+      {/* Chat area */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <div style={{ padding: "16px 28px 0" }}>
+          <h1 style={{ fontSize: "1.3rem", fontWeight: 600, marginBottom: 2 }}>AI Analytics Chat</h1>
+          <p style={{ color: palette.muted, fontSize: "0.82rem", margin: 0 }}>
+            Ask questions about your HTTP request logs in natural language
+          </p>
+        </div>
+
+        <div
+          style={{
+            flex: 1,
+            overflow: "auto",
+            padding: "20px 28px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+          }}
         >
-          Send
-        </button>
-      </form>
+          {messages.length === 0 && !loading && (
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 16,
+              }}
+            >
+              <div style={{ color: palette.muted, fontSize: "0.9rem", fontWeight: 500 }}>
+                Try one of these questions:
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 600 }}>
+                {SUGGESTIONS.map((q) => (
+                  <button
+                    key={q}
+                    type="button"
+                    className="btn btn-sm"
+                    style={{
+                      background: palette.card,
+                      border: `1px solid ${palette.border}`,
+                      color: palette.text,
+                      borderRadius: 20,
+                      fontSize: "0.82rem",
+                      padding: "6px 14px",
+                    }}
+                    onClick={() => void send(q)}
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {messages.map((msg) => (
+            <div key={msg.id} style={{ display: "flex", flexDirection: "column" }}>
+              <div style={msg.role === "user" ? bubbleUser : bubbleAssistant}>
+                {msg.text}
+              </div>
+
+              {msg.data && msg.data.length > 0 && (
+                <div
+                  style={{
+                    ...s.panel,
+                    marginTop: 8,
+                    alignSelf: "flex-start",
+                    maxWidth: "85%",
+                    overflow: "auto",
+                  }}
+                >
+                  <table
+                    className="table table-sm table-hover mb-0"
+                    style={{ fontSize: "0.82rem" }}
+                  >
+                    <thead>
+                      <tr>
+                        {Object.keys(msg.data[0]).map((key) => (
+                          <th key={key} className="text-muted fw-semibold text-nowrap">
+                            {key}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {msg.data.map((row, i) => (
+                        <tr key={i}>
+                          {Object.values(row).map((val, j) => (
+                            <td key={j} className="text-nowrap">
+                              {String(val)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {loading && (
+            <div style={{ alignSelf: "flex-start", padding: "10px 16px" }}>
+              <div className="spinner-border spinner-border-sm text-primary" role="status">
+                <span className="visually-hidden">Thinking…</span>
+              </div>
+              <span style={{ color: palette.muted, fontSize: "0.85rem", marginLeft: 8 }}>
+                Analyzing logs…
+              </span>
+            </div>
+          )}
+
+          <div ref={bottomRef} />
+        </div>
+
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            padding: "16px 28px",
+            borderTop: `1px solid ${palette.border}`,
+            background: palette.card,
+            display: "flex",
+            gap: 10,
+          }}
+        >
+          <input
+            ref={inputRef}
+            type="text"
+            className="form-control"
+            placeholder="Ask about your request logs…"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={loading}
+            autoFocus
+            style={{ fontSize: "0.9rem" }}
+          />
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={loading || !input.trim()}
+            style={{ whiteSpace: "nowrap" }}
+          >
+            Send
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

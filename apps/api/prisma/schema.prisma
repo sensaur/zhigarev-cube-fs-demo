@@ -30,13 +30,27 @@ model RequestLog {
   @@index([statusCode])
 }
 
-model AiChat {
-  id        String   @id @default(cuid())
-  sessionId String
-  role      String   @db.VarChar(10)
-  content   String
-  data      Json?
-  createdAt DateTime @default(now())
+model AiConversation {
+  id         String    @id @default(cuid())
+  sessionId  String
+  title      String    @default("New chat")
+  createdAt  DateTime  @default(now())
+  archivedAt DateTime?
+
+  messages AiChat[]
 
   @@index([sessionId, createdAt])
+}
+
+model AiChat {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   @db.VarChar(10)
+  content        String
+  data           Json?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id])
+
+  @@index([conversationId, createdAt])
 }

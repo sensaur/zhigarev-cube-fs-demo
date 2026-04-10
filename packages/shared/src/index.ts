@@ -23,8 +23,10 @@ export type {
   RequestStatsResponse,
 } from "./types/requests.js";
 export type {
+  AiConversation,
   AiQueryRequest,
   AiQueryResponse,
   AiChatMessage,
+  AiConversationsListResponse,
   AiChatHistoryResponse,
 } from "./types/ai.js";
