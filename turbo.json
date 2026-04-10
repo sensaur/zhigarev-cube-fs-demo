@@ -10,8 +10,12 @@
       "persistent": true
     },
     "lint": {},
-    "test": {},
-    "test:verbose": {},
+    "test": {
+      "env": ["DATABASE_URL"]
+    },
+    "test:verbose": {
+      "env": ["DATABASE_URL"]
+    },
     "typecheck": {}
   }
 }
