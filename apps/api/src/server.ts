@@ -13,7 +13,10 @@ const wss = new WebSocketServer({ server });
 setupWebSocket(wss);
 
 const httpServer = server.listen(env.PORT, () => {
-  logger.info({ port: env.PORT }, "API listening");
+  logger.info({
+    port: env.PORT,
+    anthropicKeySet: !!process.env.ANTHROPIC_API_KEY,
+  }, "API listening");
 });
 
 async function shutdown(signal: string) {
