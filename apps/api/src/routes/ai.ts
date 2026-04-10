@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { aiQueryBodySchema } from "../schemas/aiQueryBody.js";
 import { prisma } from "../lib/prisma.js";
 import { logger } from "../lib/logger.js";
 import type {
@@ -36,11 +37,6 @@ If a table is not useful for the answer, omit the "data" field entirely.
 Keep answers concise and data-driven.`;
 
 const sessionIdSchema = z.string().uuid();
-
-const querySchema = z.object({
-  conversationId: z.string().min(1),
-  question: z.string().min(1).max(500),
-});
 
 function toConversationDto(c: {
   id: string;
@@ -170,7 +166,7 @@ router.post("/api/ai/query", async (req, res) => {
     return;
   }
 
-  const parsed = querySchema.safeParse(req.body);
+  const parsed = aiQueryBodySchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({
       error: "Invalid request",

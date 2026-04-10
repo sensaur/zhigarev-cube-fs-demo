@@ -10,6 +10,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:verbose": "vitest run --reporter=verbose",
     "typecheck": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
@@ -17,9 +19,9 @@
     "prisma:push": "prisma db push"
   },
   "dependencies": {
-    "@repo/shared": "workspace:*",
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "^7.6.0",
+    "@repo/shared": "workspace:*",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
@@ -30,15 +32,18 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@repo/eslint-config": "workspace:*",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^24.12.0",
     "@types/pg": "^8.20.0",
+    "@types/supertest": "^7.2.0",
     "@types/ws": "^8.18.1",
-    "@repo/eslint-config": "workspace:*",
     "eslint": "^9.39.4",
     "prisma": "^7.6.0",
+    "supertest": "^7.2.2",
     "tsx": "^4.21.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.4"
   }
 }
